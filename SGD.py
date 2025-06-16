@@ -11,9 +11,9 @@ X = california.data
 y = california.target.reshape(-1, 1)
 
 # Разделение на обучающую и тестовую выборки
-X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=42)
+X_train, X_test, y_train, y_test = train_test_split(X, y, test_size=0.2, random_state=11)
 
-# Масштабирование данных
+# Стандартизиурем данные (приводит к среднему = 0, стандартному отклонению = 1)
 scaler = StandardScaler()
 X_train_scaled = scaler.fit_transform(X_train)
 X_test_scaled = scaler.transform(X_test)
@@ -21,6 +21,12 @@ X_test_scaled = scaler.transform(X_test)
 # Добавляем столбец -1 для intercept (w0)
 X_train_final = np.concatenate([-np.ones((len(X_train_scaled), 1)), X_train_scaled], axis=1)
 X_test_final = np.concatenate([-np.ones((len(X_test_scaled), 1)), X_test_scaled], axis=1)
+
+def manual_r2_score(y_true, y_pred):
+    y_mean = np.mean(y_true)
+    ss_res = np.sum((y_true - y_pred)**2)
+    ss_tot = np.sum((y_true - y_mean)**2)
+    return 1 - (ss_res / ss_tot)
 
 def compute_cost(X, y, weights, tau):
     m = len(y)
@@ -55,8 +61,8 @@ def sgd_ridge(X, y,lambda_, tau=0.1, eps=1e-5, max_iter=1000):
         Q_current = compute_cost(X_i, y_i, weights, tau)
         Q_ema = lambda_ * Q_current + (1 - lambda_) * Q_ema if i > 1 else Q_current
         
-        if i % 10 == 0:
-            Q_history.append(Q_ema)
+        
+        Q_history.append(Q_ema)
         
         if i > 10 and abs(Q_ema - Q_prev) < eps:
             print(f"Ранняя остановка на итерации {i}")
@@ -74,9 +80,8 @@ lambda_ = 0.9
 eps = 1e-6
 
 # Подбор оптимального tau
-tau_values = np.logspace(-5, 2, 20)
+tau_values = np.logspace(-5, 2, 50)
 r2_scores = []
-#best_r2 = -np.inf
 best_r2 = -1
 best_tau = 0
 best_weights = None
@@ -85,9 +90,12 @@ best_Q_history = None
 for tau in tau_values:
     weights, Q_history = sgd_ridge(X_train_final, y_train, lambda_=lambda_, tau=tau, eps=eps, max_iter=1000)
     y_pred = predict(X_test_final, weights)
-    r2 = r2_score(y_test, y_pred)
-    r2_scores.append(r2)
-    
+    r2 = manual_r2_score(y_test, y_pred)
+    if r2 > -10:
+        r2_scores.append(r2)
+    else:
+        r2_scores.append(np.nan)
+        
     if r2 > best_r2:
         best_r2 = r2
         best_tau = tau
@@ -103,7 +111,7 @@ plt.figure(figsize=(15, 5))
 
 plt.subplot(1, 3, 1)
 plt.plot(best_Q_history)
-plt.xlabel("Iterations (x10)")
+plt.xlabel("Iterations")
 plt.ylabel("Q (EMA)")
 plt.title("SGD Convergence")
 
@@ -124,3 +132,4 @@ plt.title("True vs Predicted Values")
 
 plt.tight_layout()
 plt.show()
+
